@@ -1,0 +1,101 @@
+name: Sync Upstream and Build
+
+on:
+  schedule:
+    # 每天 UTC 2:00 (北京时间 10:00) 执行
+    - cron: '0 */2 * * *'
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  sync-and-rebase:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+
+      - name: 配置 Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: 添加上游仓库
+        run: |
+          git remote add upstream https://github.com/QuantumNous/new-api.git || true
+          git remote -v
+
+      - name: 同步上游到 main 分支
+        id: sync_main
+        run: |
+          echo "开始同步上游..."
+          git fetch upstream main
+
+          # 检查是否有更新
+          BEHIND=$(git rev-list --count HEAD..upstream/main)
+          echo "本地落后上游 $BEHIND 个提交"
+
+          if [ "$BEHIND" -eq 0 ]; then
+            echo "main 分支已是最新，无需同步"
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # 合并上游更新
+          git merge upstream/main --no-edit
+
+          # 推送到 origin main
+          git push origin main
+
+          echo "main 分支同步成功"
+          echo "has_updates=true" >> $GITHUB_OUTPUT
+
+      - name: Rebase zky 分支
+        if: steps.sync_main.outputs.has_updates == 'true'
+        id: rebase_zky
+        run: |
+          echo "开始 rebase zky 分支..."
+
+          # 切换到 zky 分支
+          git fetch origin zky
+          git checkout zky
+
+          # Rebase 到最新的 main
+          if git rebase main; then
+            echo "rebase 成功"
+            echo "rebase_success=true" >> $GITHUB_OUTPUT
+          else
+            echo "rebase 失败，存在冲突"
+            git rebase --abort
+            echo "rebase_success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: 推送 zky 分支
+        if: steps.rebase_zky.outputs.rebase_success == 'true'
+        run: |
+          echo "推送 zky 分支..."
+          # 强制推送（因为 rebase 会改变历史）
+          git push origin zky --force-with-lease
+          echo "zky 分支推送成功，将触发构建流程"
+
+      - name: 同步结果通知
+        if: always()
+        run: |
+          echo "========================================"
+          echo "同步流程完成"
+          echo "========================================"
+          if [ "${{ steps.sync_main.outputs.has_updates }}" == "true" ]; then
+            echo "✅ main 分支已同步上游更新"
+            if [ "${{ steps.rebase_zky.outputs.rebase_success }}" == "true" ]; then
+              echo "✅ zky 分支 rebase 成功并已推送"
+              echo "✅ 构建流程将自动触发"
+            else
+              echo "❌ zky 分支 rebase 失败，请手动处理冲突"
+            fi
+          else
+            echo "ℹ️  main 分支已是最新，无需同步"
+          fi

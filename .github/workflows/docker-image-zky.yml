@@ -1,0 +1,89 @@
+name: Build and Push Kiro API
+
+on:
+  push:
+    branches:
+      - zky
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          repository: AkkunYo/new-api
+          ref: zky
+          fetch-depth: 0
+
+      - name: 获取版本号并写入 VERSION
+        run: |
+          # 获取仓库最新 tag（不依赖当前分支祖先链）
+          TAG=$(git tag --sort=-v:refname | head -n 1)
+
+          if [ -z "$TAG" ]; then
+            # 兜底方案: 基于提交数计算版本
+            BUILD_NUM=$(git rev-list --count HEAD)
+            MAJOR=$((BUILD_NUM / 100 + 1))
+            MINOR=$(((BUILD_NUM % 100) / 10))
+            PATCH=$((BUILD_NUM % 10))
+            TAG="v$MAJOR.$MINOR.$PATCH"
+            echo "未找到 tag，使用兜底版本: $TAG"
+          else
+            echo "获取到本地 tag: $TAG"
+          fi
+
+          # 添加自定义后缀
+          VERSION="${TAG}-kiro"
+
+          # 写入环境变量和 VERSION 文件
+          echo "TAG=$TAG" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "$VERSION" > VERSION
+
+          echo "上游版本: $TAG"
+          echo "最终版本: $VERSION"
+          echo "VERSION 文件内容: $(cat VERSION)"
+
+      - name: 设置 QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: 设置 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 登录阿里云镜像仓库
+        uses: docker/login-action@v3
+        with:
+          registry: registry.cn-hangzhou.aliyuncs.com
+          username: ${{ secrets.ALIYUN_REGISTRY_USERNAME }}
+          password: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
+
+      - name: 构建并推送镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            registry.cn-hangzhou.aliyuncs.com/zkyml/newapi-kiro:latest
+            registry.cn-hangzhou.aliyuncs.com/zkyml/newapi-kiro:${{ env.VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          no-cache: true
+
+      - name: 显示镜像信息
+        run: |
+          echo "========================================"
+          echo "镜像构建和推送完成！"
+          echo "========================================"
+          echo ""
+          echo "版本信息:"
+          echo "  上游版本: ${{ env.TAG }}"
+          echo "  最终版本: ${{ env.VERSION }}"
+          echo ""
+          echo "拉取命令:"
+          echo "  docker pull registry.cn-hangzhou.aliyuncs.com/zkyml/newapi-kiro:latest"
+          echo "  docker pull registry.cn-hangzhou.aliyuncs.com/zkyml/newapi-kiro:${{ env.VERSION }}"
+          echo ""

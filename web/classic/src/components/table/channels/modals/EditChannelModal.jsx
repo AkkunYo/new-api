@@ -61,6 +61,7 @@ import ModelSelectModal from './ModelSelectModal';
 import SingleModelSelectModal from './SingleModelSelectModal';
 import OllamaModelModal from './OllamaModelModal';
 import CodexOAuthModal from './CodexOAuthModal';
+import KiroOAuthModal from './KiroOAuthModal';
 import ParamOverrideEditorModal from './ParamOverrideEditorModal';
 import JSONEditor from '../../../common/ui/JSONEditor';
 import SecureVerificationModal from '../../../common/modals/SecureVerificationModal';
@@ -383,6 +384,9 @@ const EditChannelModal = (props) => {
   const [ionetMetadata, setIonetMetadata] = useState(null);
   const [codexOAuthModalVisible, setCodexOAuthModalVisible] = useState(false);
   const [codexCredentialRefreshing, setCodexCredentialRefreshing] =
+    useState(false);
+  const [kiroOAuthModalVisible, setKiroOAuthModalVisible] = useState(false);
+  const [kiroCredentialRefreshing, setKiroCredentialRefreshing] =
     useState(false);
   const [paramOverrideEditorVisible, setParamOverrideEditorVisible] =
     useState(false);
@@ -1232,6 +1236,11 @@ const EditChannelModal = (props) => {
     formatJsonField('key');
   };
 
+  const handleKiroOAuthGenerated = (key) => {
+    handleInputChange('key', key);
+    formatJsonField('key');
+  };
+
   const handleRefreshCodexCredential = async () => {
     if (!isEdit) return;
 
@@ -1250,6 +1259,27 @@ const EditChannelModal = (props) => {
       showError(error.message || t('刷新失败'));
     } finally {
       setCodexCredentialRefreshing(false);
+    }
+  };
+
+  const handleRefreshKiroCredential = async () => {
+    if (!isEdit) return;
+
+    setKiroCredentialRefreshing(true);
+    try {
+      const res = await API.post(
+        `/api/channel/${channelId}/kiro/refresh`,
+        {},
+        { skipErrorHandler: true },
+      );
+      if (!res?.data?.success) {
+        throw new Error(res?.data?.message || 'Failed to refresh credential');
+      }
+      showSuccess(t('凭证已刷新'));
+    } catch (error) {
+      showError(error.message || t('刷新失败'));
+    } finally {
+      setKiroCredentialRefreshing(false);
     }
   };
 
@@ -1584,6 +1614,61 @@ const EditChannelModal = (props) => {
           showInfo(t('密钥必须是合法的 JSON 格式！'));
           return;
         }
+      }
+    }
+
+    if (localInputs.type === 58) {
+      if (batch) {
+        showInfo(t('Kiro 渠道不支持批量创建'));
+        return;
+      }
+
+      const rawKey = (localInputs.key || '').trim();
+
+      // 编辑模式下，如果 key 为空，删除该字段以保留原始 token
+      if (isEdit && rawKey === '') {
+        delete localInputs.key;
+      } else if (rawKey !== '') {
+        // Kiro 支持两种格式：
+        // 1. 纯字符串 refreshToken
+        // 2. JSON 格式（包含 refreshToken, clientId, clientSecret 等）
+        if (rawKey.startsWith('{')) {
+          // JSON 格式，需要验证
+          if (!verifyJSON(rawKey)) {
+            showInfo(t('密钥 JSON 格式不正确！'));
+            return;
+          }
+          try {
+            const parsed = JSON.parse(rawKey);
+            if (
+              !parsed ||
+              typeof parsed !== 'object' ||
+              Array.isArray(parsed)
+            ) {
+              showInfo(t('密钥必须是 JSON 对象'));
+              return;
+            }
+            // 验证必需字段
+            const refreshToken = String(
+              parsed.refresh_token || parsed.refreshToken || '',
+            ).trim();
+            if (!refreshToken) {
+              showInfo(t('密钥 JSON 必须包含 refresh_token 或 refreshToken'));
+              return;
+            }
+            localInputs.key = JSON.stringify(parsed);
+          } catch (error) {
+            showInfo(t('密钥 JSON 格式不正确！'));
+            return;
+          }
+        } else {
+          // 纯字符串格式，直接使用
+          localInputs.key = rawKey;
+        }
+      } else if (!isEdit) {
+        // 新建模式下必须填写 key
+        showInfo(t('请输入密钥！'));
+        return;
       }
     }
 
@@ -1978,7 +2063,7 @@ const EditChannelModal = (props) => {
     }
   };
 
-  const batchAllowed = (!isEdit || isMultiKeyChannel) && inputs.type !== 57;
+  const batchAllowed = (!isEdit || isMultiKeyChannel) && inputs.type !== 57 && inputs.type !== 58;
   const batchExtra = batchAllowed ? (
     <Space>
       {!isEdit && (
@@ -2639,6 +2724,17 @@ const EditChannelModal = (props) => {
                       />
                     )}
 
+                    {inputs.type === 58 && (
+                      <Banner
+                        type='warning'
+                        closeIcon={null}
+                        className='mb-4 rounded-xl'
+                        description={t(
+                          '免责声明：仅限个人使用，请勿分发或共享任何凭证。Kiro 是 AWS CodeWhisperer 的底层服务，请在充分了解流程与风险后使用，并遵守 AWS 的相关条款与政策。',
+                        )}
+                      />
+                    )}
+
                     {inputs.type === 20 && (
                       <Form.Switch
                         field='is_enterprise_account'
@@ -2902,6 +2998,98 @@ const EditChannelModal = (props) => {
                               visible={codexOAuthModalVisible}
                               onCancel={() => setCodexOAuthModalVisible(false)}
                               onSuccess={handleCodexOAuthGenerated}
+                            />
+                          </>
+                        ) : inputs.type === 58 ? (
+                          <>
+                            <Form.TextArea
+                              field='key'
+                              label={t('密钥')}
+                              placeholder={t(
+                                '请输入 refresh_token（支持纯字符串或 JSON 格式）',
+                              )}
+                              rules={
+                                !isEdit
+                                  ? [
+                                      {
+                                        required: true,
+                                        message: t('请输入密钥'),
+                                      },
+                                    ]
+                                  : []
+                              }
+                              extraText={
+                                <div className='flex flex-col gap-2'>
+                                  <Text type='tertiary' size='small'>
+                                    {t('密钥格式支持两种方式：')}
+                                  </Text>
+                                  <Text type='tertiary' size='small'>
+                                    {t(
+                                      '1. Social Auth (Google/GitHub): 直接填入 refresh_token 字符串，或 JSON 格式 {"refresh_token": "xxx", "region": "us-east-1"}',
+                                    )}
+                                  </Text>
+                                  <Text type='tertiary' size='small'>
+                                    {t(
+                                      '2. Builder ID: JSON 格式 {"refresh_token": "xxx", "client_id": "xxx", "client_secret": "xxx", "idc_region": "us-east-1"}',
+                                    )}
+                                  </Text>
+
+                                  <Space wrap spacing='tight'>
+                                    <Button
+                                      size='small'
+                                      type='primary'
+                                      theme='outline'
+                                      onClick={() =>
+                                        setKiroOAuthModalVisible(true)
+                                      }
+                                      disabled={isIonetLocked}
+                                    >
+                                      {t('Kiro 授权')}
+                                    </Button>
+                                    {isEdit && (
+                                      <Button
+                                        size='small'
+                                        type='primary'
+                                        theme='outline'
+                                        onClick={handleRefreshKiroCredential}
+                                        loading={kiroCredentialRefreshing}
+                                        disabled={isIonetLocked}
+                                      >
+                                        {t('刷新凭证')}
+                                      </Button>
+                                    )}
+                                    <Button
+                                      size='small'
+                                      type='primary'
+                                      theme='outline'
+                                      onClick={() => formatJsonField('key')}
+                                      disabled={isIonetLocked}
+                                    >
+                                      {t('格式化')}
+                                    </Button>
+                                    {isEdit && (
+                                      <Button
+                                        size='small'
+                                        type='primary'
+                                        theme='outline'
+                                        onClick={handleShow2FAModal}
+                                        disabled={isIonetLocked}
+                                      >
+                                        {t('查看密钥')}
+                                      </Button>
+                                    )}
+                                    {batchExtra}
+                                  </Space>
+                                </div>
+                              }
+                              autosize
+                              showClear
+                            />
+
+                            <KiroOAuthModal
+                              visible={kiroOAuthModalVisible}
+                              onCancel={() => setKiroOAuthModalVisible(false)}
+                              onSuccess={handleKiroOAuthGenerated}
                             />
                           </>
                         ) : inputs.type === 41 &&

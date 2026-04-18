@@ -61,6 +61,7 @@ import {
   Jimeng,
   Perplexity,
   Replicate,
+  Aws,
 } from '@lobehub/icons';
 
 import {
@@ -405,6 +406,8 @@ export function getChannelIcon(channelType) {
       return <Doubao.Color size={iconSize} />;
     case 56: // Replicate
       return <Replicate size={iconSize} />;
+    case 58: // Kiro
+      return <Aws.Color size={iconSize} />;
     case 8: // 自定义渠道
     case 22: // 知识库：FastGPT
       return <FastGPT.Color size={iconSize} />;

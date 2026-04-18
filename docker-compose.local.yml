@@ -1,0 +1,31 @@
+# Local debug build - full frontend + backend build, reuses existing sqlite data
+#
+# Usage:
+#   docker compose -f docker-compose.local.yml up -d --build
+#
+# Rebuild after code changes:
+#   docker compose -f docker-compose.local.yml up -d --build
+#
+# Logs:
+#   docker compose -f docker-compose.local.yml logs -f
+#
+# Stop:
+#   docker compose -f docker-compose.local.yml down
+
+services:
+  new-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: new-api-local:latest
+    container_name: new-api-local
+    restart: unless-stopped
+    ports:
+      - "30002:3000"
+    volumes:
+      - /Users/zhangky/IdeaProjects/new-api:/data
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    environment:
+      - TZ=Asia/Shanghai
