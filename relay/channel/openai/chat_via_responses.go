@@ -304,6 +304,10 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 		var streamResp dto.ResponsesStreamResponse
 		if err := common.UnmarshalJsonStr(data, &streamResp); err != nil {
+			if shouldSkipCodexResponsesStreamChunk(info, data, err) {
+				logger.LogWarn(c, "skip codex non-json responses event: "+strings.TrimSpace(data))
+				return
+			}
 			logger.LogError(c, "failed to unmarshal responses stream event: "+err.Error())
 			sr.Error(err)
 			return

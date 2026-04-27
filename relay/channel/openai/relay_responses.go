@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -68,6 +69,20 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	return &usage, nil
 }
 
+func shouldSkipCodexResponsesStreamChunk(info *relaycommon.RelayInfo, data string, err error) bool {
+	if info == nil || info.ChannelMeta == nil || info.ChannelMeta.ApiType != constant.APITypeCodex {
+		return false
+	}
+	trimmed := strings.TrimSpace(data)
+	if trimmed == "" {
+		return true
+	}
+	if !strings.HasPrefix(trimmed, "{") {
+		return true
+	}
+	return err != nil
+}
+
 func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
 	if resp == nil || resp.Body == nil {
 		logger.LogError(c, "invalid response or response body")
@@ -84,6 +99,10 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		// 检查当前数据是否包含 completed 状态和 usage 信息
 		var streamResponse dto.ResponsesStreamResponse
 		if err := common.UnmarshalJsonStr(data, &streamResponse); err != nil {
+			if shouldSkipCodexResponsesStreamChunk(info, data, err) {
+				logger.LogWarn(c, "skip codex non-json responses stream chunk: "+strings.TrimSpace(data))
+				return
+			}
 			logger.LogError(c, "failed to unmarshal stream response: "+err.Error())
 			sr.Error(err)
 			return

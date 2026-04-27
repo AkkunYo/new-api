@@ -22,6 +22,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func shouldRouteChatCompletionsViaResponses(info *relaycommon.RelayInfo) bool {
+	if info == nil {
+		return false
+	}
+	if info.ChannelType == constant.ChannelTypeCodex {
+		return true
+	}
+	return service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName)
+}
+
 func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
 	info.InitChannelMeta(c)
 
@@ -74,7 +84,7 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	if info.RelayMode == relayconstant.RelayModeChatCompletions &&
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
-		service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
+		shouldRouteChatCompletionsViaResponses(info) {
 		applySystemPromptIfNeeded(c, info, request)
 		usage, newApiErr := chatCompletionsViaResponses(c, info, adaptor, request)
 		if newApiErr != nil {

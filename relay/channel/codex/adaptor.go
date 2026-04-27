@@ -55,6 +55,10 @@ func (a *Adaptor) ConvertEmbeddingRequest(c *gin.Context, info *relaycommon.Rela
 func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.OpenAIResponsesRequest) (any, error) {
 	isCompact := info != nil && info.RelayMode == relayconstant.RelayModeResponsesCompact
 
+	if info != nil && info.IsStream && request.Stream == nil {
+		request.Stream = common.GetPointer(true)
+	}
+
 	if info != nil && info.ChannelSetting.SystemPrompt != "" {
 		systemPrompt := info.ChannelSetting.SystemPrompt
 

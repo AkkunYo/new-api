@@ -130,10 +130,13 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 
 	if !model_setting.GetGlobalSettings().PassThroughRequestEnabled &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
-		service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
+		shouldRouteChatCompletionsViaResponses(info) {
 		openAIRequest, convErr := service.ClaudeToOpenAIRequest(*request, info)
 		if convErr != nil {
 			return types.NewError(convErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		}
+		if info.ChannelType == constant.ChannelTypeCodex {
+			openAIRequest.Stream = common.GetPointer(true)
 		}
 
 		usage, newApiErr := chatCompletionsViaResponses(c, info, adaptor, openAIRequest)
