@@ -261,6 +261,13 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.POST("/:id/kiro/oauth/builderid/poll", controller.PollKiroBuilderIDTokenForChannel)
 			channelRoute.POST("/:id/kiro/refresh", controller.RefreshKiroChannelCredential)
 			channelRoute.GET("/:id/kiro/usage", controller.GetKiroChannelUsage)
+			channelRoute.GET("/:id/antigravity/usage", controller.GetAntigravityChannelUsage)
+			// Antigravity OAuth routes
+			channelRoute.POST("/antigravity/oauth/start", controller.StartAntigravityOAuth)
+			channelRoute.POST("/antigravity/oauth/complete", controller.CompleteAntigravityOAuth)
+			channelRoute.POST("/:id/antigravity/oauth/start", controller.StartAntigravityOAuthForChannel)
+			channelRoute.POST("/:id/antigravity/oauth/complete", controller.CompleteAntigravityOAuthForChannel)
+			channelRoute.POST("/antigravity/refresh", controller.RefreshAntigravityChannelCredential)
 			channelRoute.POST("/ollama/pull", controller.OllamaPullModel)
 			channelRoute.POST("/ollama/pull/stream", controller.OllamaPullModelStream)
 			channelRoute.DELETE("/ollama/delete", controller.OllamaDeleteModel)

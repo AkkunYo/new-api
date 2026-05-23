@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -14,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relay/channel/antigravity"
 	"github.com/QuantumNous/new-api/relay/channel/gemini"
 	"github.com/QuantumNous/new-api/relay/channel/ollama"
 	"github.com/QuantumNous/new-api/service"
@@ -285,6 +287,53 @@ func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
 		models, err := gemini.FetchGeminiModels(baseURL, key, channel.GetSetting().Proxy)
 		if err != nil {
 			return nil, err
+		}
+		return normalizeModelNames(models), nil
+	}
+
+	if channel.Type == constant.ChannelTypeAntigravity {
+		oauthKey, err := antigravity.ParseOAuthKey(strings.TrimSpace(channel.Key))
+		if err != nil {
+			return nil, fmt.Errorf("解析 antigravity 凭证失败: %w", err)
+		}
+		accessToken := strings.TrimSpace(oauthKey.AccessToken)
+		if oauthKey.IsExpiringSoon() || accessToken == "" {
+			if strings.TrimSpace(oauthKey.RefreshToken) != "" {
+				refreshCtx, refreshCancel := context.WithTimeout(context.Background(), 15*time.Second)
+				newKey, _, refreshErr := service.RefreshAntigravityChannelCredential(refreshCtx, channel.Id, service.AntigravityCredentialRefreshOptions{ResetCaches: true})
+				refreshCancel()
+				if refreshErr == nil {
+					accessToken = strings.TrimSpace(newKey.AccessToken)
+					oauthKey.ProjectID = strings.TrimSpace(newKey.ProjectID)
+				} else if accessToken == "" {
+					return nil, fmt.Errorf("刷新 antigravity token 失败: %w", refreshErr)
+				}
+			} else if accessToken == "" {
+				return nil, fmt.Errorf("antigravity access_token 已过期且缺少 refresh_token")
+			}
+		}
+		client, err := service.NewProxyHttpClient(channel.GetSetting().Proxy)
+		if err != nil {
+			return nil, fmt.Errorf("创建 HTTP 客户端失败: %w", err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		statusCode, body, err := service.FetchAntigravityModelsQuota(ctx, client, accessToken, oauthKey.ProjectID)
+		if err != nil {
+			return nil, fmt.Errorf("请求 antigravity 可用模型失败: %w", err)
+		}
+		if statusCode < 200 || statusCode >= 300 {
+			return nil, fmt.Errorf("请求 antigravity 可用模型失败，HTTP 状态码: %d, 响应: %s", statusCode, string(body))
+		}
+		var quotaResp struct {
+			Models map[string]any `json:"models"`
+		}
+		if err := common.Unmarshal(body, &quotaResp); err != nil {
+			return nil, fmt.Errorf("解析 antigravity 可用模型响应失败: %w", err)
+		}
+		var models []string
+		for modelName := range quotaResp.Models {
+			models = append(models, modelName)
 		}
 		return normalizeModelNames(models), nil
 	}

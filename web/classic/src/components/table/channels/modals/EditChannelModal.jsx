@@ -62,6 +62,7 @@ import SingleModelSelectModal from './SingleModelSelectModal';
 import OllamaModelModal from './OllamaModelModal';
 import CodexOAuthModal from './CodexOAuthModal';
 import KiroOAuthModal from './KiroOAuthModal';
+import AntigravityOAuthModal from './AntigravityOAuthModal';
 import ParamOverrideEditorModal from './ParamOverrideEditorModal';
 import JSONEditor from '../../../common/ui/JSONEditor';
 import SecureVerificationModal from '../../../common/modals/SecureVerificationModal';
@@ -132,7 +133,7 @@ const DEPRECATED_DOUBAO_CODING_PLAN_BASE_URL = 'doubao-coding-plan';
 
 // 支持并且已适配通过接口获取模型列表的渠道类型
 const MODEL_FETCHABLE_TYPES = new Set([
-  1, 4, 14, 34, 17, 26, 27, 24, 47, 25, 20, 23, 31, 40, 42, 48, 43,
+  1, 4, 14, 34, 17, 26, 27, 24, 47, 25, 20, 23, 31, 40, 42, 48, 43, 59,
 ]);
 
 function type2secretPrompt(type) {
@@ -387,6 +388,8 @@ const EditChannelModal = (props) => {
     useState(false);
   const [kiroOAuthModalVisible, setKiroOAuthModalVisible] = useState(false);
   const [kiroCredentialRefreshing, setKiroCredentialRefreshing] =
+    useState(false);
+  const [antigravityOAuthModalVisible, setAntigravityOAuthModalVisible] =
     useState(false);
   const [paramOverrideEditorVisible, setParamOverrideEditorVisible] =
     useState(false);
@@ -1280,6 +1283,34 @@ const EditChannelModal = (props) => {
       showError(error.message || t('刷新失败'));
     } finally {
       setKiroCredentialRefreshing(false);
+    }
+  };
+
+  const handleAntigravityOAuthGenerated = (key) => {
+    handleInputChange('key', key);
+    formatJsonField('key');
+  };
+
+  const [antigravityCredentialRefreshing, setAntigravityCredentialRefreshing] =
+    useState(false);
+
+  const handleRefreshAntigravityCredential = async () => {
+    if (!isEdit) return;
+    setAntigravityCredentialRefreshing(true);
+    try {
+      const res = await API.post(
+        '/api/channel/antigravity/refresh',
+        { channel_id: channelId },
+        { skipErrorHandler: true },
+      );
+      if (!res?.data?.success) {
+        throw new Error(res?.data?.message || 'Failed to refresh credential');
+      }
+      showSuccess(t('凭证已刷新'));
+    } catch (error) {
+      showError(error.message || t('刷新失败'));
+    } finally {
+      setAntigravityCredentialRefreshing(false);
     }
   };
 
@@ -2735,6 +2766,17 @@ const EditChannelModal = (props) => {
                       />
                     )}
 
+                    {inputs.type === 59 && (
+                      <Banner
+                        type='warning'
+                        closeIcon={null}
+                        className='mb-4 rounded-xl'
+                        description={t(
+                          '免责声明：仅限个人使用，请勿分发或共享任何凭证。Antigravity 使用 Google Cloud Code Assist 底层服务，请在充分了解流程与风险后使用，并遵守 Google 的相关条款与政策。',
+                        )}
+                      />
+                    )}
+
                     {inputs.type === 20 && (
                       <Form.Switch
                         field='is_enterprise_account'
@@ -3090,6 +3132,93 @@ const EditChannelModal = (props) => {
                               visible={kiroOAuthModalVisible}
                               onCancel={() => setKiroOAuthModalVisible(false)}
                               onSuccess={handleKiroOAuthGenerated}
+                            />
+                          </>
+                        ) : inputs.type === 59 ? (
+                          <>
+                            <Form.TextArea
+                              field='key'
+                              label={t('密钥')}
+                              placeholder={t(
+                                '请输入 refresh_token（支持纯字符串或 JSON 格式）',
+                              )}
+                              rules={
+                                !isEdit
+                                  ? [
+                                      {
+                                        required: true,
+                                        message: t('请输入密钥'),
+                                      },
+                                    ]
+                                  : []
+                              }
+                              extraText={
+                                <div className='flex flex-col gap-2'>
+                                  <Text type='tertiary' size='small'>
+                                    {t(
+                                      '点击「Google 授权」完成登录，系统自动获取 project_id 并保存凭证。也可手动填入 refresh_token 字符串或 JSON 格式密钥。',
+                                    )}
+                                  </Text>
+
+                                  <Space wrap spacing='tight'>
+                                    <Button
+                                      size='small'
+                                      type='primary'
+                                      theme='outline'
+                                      onClick={() =>
+                                        setAntigravityOAuthModalVisible(true)
+                                      }
+                                      disabled={isIonetLocked}
+                                    >
+                                      {t('Google 授权')}
+                                    </Button>
+                                    {isEdit && (
+                                      <Button
+                                        size='small'
+                                        type='primary'
+                                        theme='outline'
+                                        onClick={handleRefreshAntigravityCredential}
+                                        loading={antigravityCredentialRefreshing}
+                                        disabled={isIonetLocked}
+                                      >
+                                        {t('刷新凭证')}
+                                      </Button>
+                                    )}
+                                    <Button
+                                      size='small'
+                                      type='primary'
+                                      theme='outline'
+                                      onClick={() => formatJsonField('key')}
+                                      disabled={isIonetLocked}
+                                    >
+                                      {t('格式化')}
+                                    </Button>
+                                    {isEdit && (
+                                      <Button
+                                        size='small'
+                                        type='primary'
+                                        theme='outline'
+                                        onClick={handleShow2FAModal}
+                                        disabled={isIonetLocked}
+                                      >
+                                        {t('查看密钥')}
+                                      </Button>
+                                    )}
+                                  </Space>
+                                </div>
+                              }
+                              autosize
+                              showClear
+                            />
+
+                            <AntigravityOAuthModal
+                              visible={antigravityOAuthModalVisible}
+                              onCancel={() =>
+                                setAntigravityOAuthModalVisible(false)
+                              }
+                              onSuccess={handleAntigravityOAuthGenerated}
+                              channelId={channelId}
+                              isEdit={isEdit}
                             />
                           </>
                         ) : inputs.type === 41 &&

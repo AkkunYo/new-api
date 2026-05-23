@@ -237,8 +237,8 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuShortcut>
           </DropdownMenuItem>
 
-          {/* Detect Upstream Updates (only for fetchable channel types) */}
-          {MODEL_FETCHABLE_TYPES.has(channel.type) && (
+          {/* Detect Upstream Updates (only for fetchable channel types, excluding Antigravity) */}
+          {MODEL_FETCHABLE_TYPES.has(channel.type) && channel.type !== 59 && (
             <DropdownMenuItem
               onClick={() => {
                 const meta = parseUpstreamUpdateMeta(channel.settings)

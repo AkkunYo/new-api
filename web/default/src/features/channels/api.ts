@@ -73,6 +73,23 @@ export type CodexUsageResponse = {
   data?: Record<string, unknown>
 }
 
+export type AntigravityUsageResponse = {
+  success: boolean
+  message?: string
+  upstream_status?: number
+  data?: Record<string, unknown>
+  key_project_id?: string
+  models_quota?: {
+    models?: Record<string, {
+      quotaInfo?: {
+        remainingFraction?: number
+        resetTime?: string
+      }
+      displayName?: string
+    }>
+  }
+}
+
 export type CodexCredentialRefreshResponse = {
   success: boolean
   message?: string
@@ -317,12 +334,88 @@ export async function refreshCodexCredential(
   return res.data
 }
 
+export type AntigravityCredentialRefreshResponse = {
+  success: boolean
+  message?: string
+  project_id?: string
+  expiry?: string
+}
+
+export type AntigravityOAuthStartResponse = {
+  success: boolean
+  message?: string
+  data?: {
+    authorize_url?: string
+  }
+}
+
+export type AntigravityOAuthCompleteResponse = {
+  success: boolean
+  message?: string
+  data?: {
+    key?: string
+    email?: string
+    project_id?: string
+    expires_at?: string
+    channel_id?: number
+  }
+}
+
+export async function startAntigravityOAuth(
+  channelId?: number
+): Promise<AntigravityOAuthStartResponse> {
+  const config: ApiRequestConfig = { skipBusinessError: true }
+  const endpoint = channelId
+    ? `/api/channel/${channelId}/antigravity/oauth/start`
+    : '/api/channel/antigravity/oauth/start'
+  const res = await api.post(endpoint, {}, config)
+  return res.data
+}
+
+export async function completeAntigravityOAuth(
+  input: string,
+  channelId?: number
+): Promise<AntigravityOAuthCompleteResponse> {
+  const config: ApiRequestConfig = { skipBusinessError: true }
+  const endpoint = channelId
+    ? `/api/channel/${channelId}/antigravity/oauth/complete`
+    : '/api/channel/antigravity/oauth/complete'
+  const res = await api.post(endpoint, { input }, config)
+  return res.data
+}
+
+export async function refreshAntigravityCredential(
+  channelId: number
+): Promise<AntigravityCredentialRefreshResponse> {
+  const config: ApiRequestConfig = { skipBusinessError: true }
+  const res = await api.post(
+    '/api/channel/antigravity/refresh',
+    { channel_id: channelId },
+    config
+  )
+  return res.data
+}
+
 export async function getCodexUsage(
   channelId: number
 ): Promise<CodexUsageResponse> {
   const res = await api.get(
     `/api/channel/${channelId}/codex/usage`,
     channelActionConfig({ disableDuplicate: true })
+  )
+  return res.data
+}
+
+export async function getAntigravityUsage(
+  channelId: number
+): Promise<AntigravityUsageResponse> {
+  const config: ApiRequestConfig = {
+    skipBusinessError: true,
+    disableDuplicate: true,
+  }
+  const res = await api.get(
+    `/api/channel/${channelId}/antigravity/usage`,
+    config
   )
   return res.data
 }

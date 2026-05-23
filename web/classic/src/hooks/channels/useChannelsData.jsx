@@ -40,6 +40,7 @@ import { parseUpstreamUpdateMeta } from './upstreamUpdateUtils';
 import { Modal, Button } from '@douyinfe/semi-ui';
 import { openCodexUsageModal } from '../../components/table/channels/modals/CodexUsageModal';
 import { openKiroUsageModal } from '../../components/table/channels/modals/KiroUsageModal';
+import { openAntigravityUsageModal } from '../../components/table/channels/modals/AntigravityUsageModal';
 
 export const useChannelsData = () => {
   const { t } = useTranslation();
@@ -770,6 +771,19 @@ export const useChannelsData = () => {
 
     if (record?.type === 58) {
       openKiroUsageModal({
+        t,
+        record,
+        onCopy: async (text) => {
+          const ok = await copy(text);
+          if (ok) showSuccess(t('已复制'));
+          else showError(t('复制失败'));
+        },
+      });
+      return;
+    }
+
+    if (record?.type === 59) {
+      openAntigravityUsageModal({
         t,
         record,
         onCopy: async (text) => {
